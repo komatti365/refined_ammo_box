@@ -2,14 +2,13 @@ package com.nanaios.refined_ammo_box.item;
 
 import com.nanaios.refined_ammo_box.RefinedAmmoBoxLang;
 import com.nanaios.refined_ammo_box.util.RSLinkHelper;
-import com.refinedmods.refinedstorage.render.Styles;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
-import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
@@ -20,13 +19,14 @@ public class CreativeWirelessAmmoBoxItem extends WirelessAmmoBoxItem {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, TooltipFlag flag) {
-        if (RSLinkHelper.isValid(stack)) {
+    public void appendHoverText(@NotNull ItemStack stack, @NotNull TooltipContext context, List<Component> tooltip, @NotNull TooltipFlag flag) {
+        GlobalPos linkedPos = RSLinkHelper.getLinkedPosition(stack);
+        if (linkedPos != null) {
             tooltip.add(RefinedAmmoBoxLang.NETWORK_TOOL_TIP.get(
-                    RSLinkHelper.getX(stack),
-                    RSLinkHelper.getY(stack),
-                    RSLinkHelper.getZ(stack)
-            ).setStyle(Styles.GRAY));
+                    linkedPos.pos().getX(),
+                    linkedPos.pos().getY(),
+                    linkedPos.pos().getZ()
+            ).setStyle(Style.EMPTY.withColor(ChatFormatting.GRAY)));
         }
     }
 

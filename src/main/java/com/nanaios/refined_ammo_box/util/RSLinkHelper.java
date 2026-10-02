@@ -1,155 +1,110 @@
 package com.nanaios.refined_ammo_box.util;
 
-import com.refinedmods.refinedstorage.api.network.INetwork;
-import com.refinedmods.refinedstorage.api.network.INetworkNodeGraphEntry;
-import com.refinedmods.refinedstorage.api.network.node.INetworkNode;
-import com.refinedmods.refinedstorage.api.util.Action;
-import com.refinedmods.refinedstorage.apiimpl.network.node.WirelessTransmitterNetworkNode;
-import com.refinedmods.refinedstorage.util.NetworkUtils;
+import com.nanaios.refined_ammo_box.registries.RefinedAmmoBoxDataComponents;
+import com.refinedmods.refinedstorage.api.core.Action;
+import com.refinedmods.refinedstorage.api.network.Network;
+import com.refinedmods.refinedstorage.api.network.node.GraphNetworkComponent;
+import com.refinedmods.refinedstorage.api.network.node.NetworkNode;
+import com.refinedmods.refinedstorage.api.network.node.container.NetworkNodeContainer;
+import com.refinedmods.refinedstorage.api.network.storage.StorageNetworkComponent;
+import com.refinedmods.refinedstorage.api.storage.Actor;
+import com.refinedmods.refinedstorage.common.api.support.network.InWorldNetworkNodeContainer;
+import com.refinedmods.refinedstorage.common.api.support.network.NetworkNodeContainerProvider;
+import com.refinedmods.refinedstorage.common.api.support.network.item.NetworkItemPlayerValidator;
+import com.refinedmods.refinedstorage.common.support.resource.ItemResource;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import org.jetbrains.annotations.Nullable;
 
 public class RSLinkHelper {
-    private static final String NBT_NODE_X = "NodeX";
-    private static final String NBT_NODE_Y = "NodeY";
-    private static final String NBT_NODE_Z = "NodeZ";
-    private static final String NBT_DIMENSION = "Dimension";
 
     @Nullable
-    public static ResourceKey<Level> getDimension(ItemStack stack) {
-        CompoundTag tag = stack.getTag();
-        if(tag == null) return null;
-
-        if (tag.contains(NBT_DIMENSION)) {
-            ResourceLocation name = ResourceLocation.tryParse(stack.getTag().getString(NBT_DIMENSION));
-            if (name == null) {
-                return null;
-            }
-            return ResourceKey.create(Registries.DIMENSION, name);
-        }
-
-        return null;
-    }
-
-    public static int getX(ItemStack stack) {
-        CompoundTag tag = stack.getTag();
-        if(tag == null) return 0;
-        return stack.getTag().getInt(NBT_NODE_X);
-    }
-
-    public static int getY(ItemStack stack) {
-        CompoundTag tag = stack.getTag();
-        if(tag == null) return 0;
-        return stack.getTag().getInt(NBT_NODE_Y);
-    }
-
-    public static int getZ(ItemStack stack) {
-        CompoundTag tag = stack.getTag();
-        if(tag == null) return 0;
-        return stack.getTag().getInt(NBT_NODE_Z);
+    public static GlobalPos getLinkedPosition(ItemStack stack) {
+        return stack.get(RefinedAmmoBoxDataComponents.RS_LINK_TARGET);
     }
 
     public static boolean isValid(ItemStack stack) {
-        CompoundTag tag = stack.getTag();
-        if(tag == null) return false;
-
-        return stack.getTag().contains(NBT_NODE_X)
-                && stack.getTag().contains(NBT_NODE_Y)
-                && stack.getTag().contains(NBT_NODE_Z)
-                && stack.getTag().contains(NBT_DIMENSION);
+        return getLinkedPosition(stack) != null;
     }
 
-    public static void putNode(ItemStack stack, int x, int y, int z, String dimensionKey) {
-        CompoundTag tag = stack.getOrCreateTag();
-        tag.putInt(NBT_NODE_X, x);
-        tag.putInt(NBT_NODE_Y, y);
-        tag.putInt(NBT_NODE_Z, z);
-        tag.putString(NBT_DIMENSION, dimensionKey);
+    public static void putNode(ItemStack stack, GlobalPos globalPos) {
+        stack.set(RefinedAmmoBoxDataComponents.RS_LINK_TARGET, globalPos);
     }
 
-    /// RSネットワークを取得する
-    ///
-    /// @param stack  ネットワークアイテムのItemStack
-    /// @param server MinecraftServerインスタンス
     @Nullable
-    public static INetwork getNetwork(ItemStack stack, MinecraftServer server) {
-        if (!isValid(stack)) return null;
+    public static Network getNetwork(ItemStack stack) {
+        GlobalPos linkPos = getLinkedPosition(stack);
+        if (linkPos == null) return null;
 
-        ResourceKey<Level> dimension = getDimension(stack);
-        if (dimension == null) return null;
+        ServerLevel level = ServerLifecycleHooks.getCurrentServer().getLevel(linkPos.dimension());
+        if (level == null) return null;
 
-        Level nodeLevel = server.getLevel(dimension);
-        if (nodeLevel == null) return null;
+        if (!level.isLoaded(linkPos.pos())) return null;
 
-        BlockPos pos = new BlockPos(getX(stack), getY(stack), getZ(stack));
-        if (!nodeLevel.isLoaded(pos)) return null;
-
-        return NetworkUtils.getNetworkFromNode(NetworkUtils.getNodeFromBlockEntity(nodeLevel.getBlockEntity(pos)));
+        BlockEntity blockEntity = level.getBlockEntity(linkPos.pos());
+        if (blockEntity instanceof NetworkNodeContainerProvider provider) {
+            for (InWorldNetworkNodeContainer container : provider.getContainers()) {
+                NetworkNode node = container.getNode();
+                Network network = node.getNetwork();
+                if (network != null) {
+                    return network;
+                }
+            }
+        }
+        return null;
     }
 
-    public static boolean isInnerRange(INetwork network,Level level,BlockPos pos) {
-        // ネットワークが動いているかチェック
-        if(!network.canRun()) return false;
+    public static boolean isInnerRange(Network network, Level level, BlockPos pos) {
+        NetworkItemPlayerValidator.PlayerCoordinates coordinates =
+                new NetworkItemPlayerValidator.PlayerCoordinates(level.dimension(), Vec3.atCenterOf(pos));
 
-        for (INetworkNodeGraphEntry entry : network.getNodeGraph().all()) {
-            //アクティブなnodeを取得
-            INetworkNode node = entry.getNode();
-            if(!node.isActive()) continue;
+        GraphNetworkComponent graph = network.getComponent(GraphNetworkComponent.class);
+        if (graph == null) return false;
 
-            // Wireless Transmitterかどうかチェック
-            if(!(node instanceof WirelessTransmitterNetworkNode transmitter)) continue;
-
-            // 同一dimensionでなければ飛ばす
-            if(!transmitter.getDimension().equals(level.dimension())) continue;
-
-            // アクセスポイントの範囲を取得
-            double rangeLimit = transmitter.getRange();
-            // 距離の二乗を計算し、三平方の定理で使用する
-            rangeLimit *= rangeLimit;
-
-            // 三平方の定理で距離の二乗を計算
-            int offX = transmitter.getOrigin().getX() - pos.getX();
-            int offY = transmitter.getOrigin().getY() - pos.getY();
-            int offZ = transmitter.getOrigin().getZ() - pos.getZ();
-            double distance = offX * offX + offY * offY + offZ * offZ;
-
-            // 距離が範囲内かチェック
-            if (distance < rangeLimit) return true;
+        for (NetworkNodeContainer container : graph.getContainers()) {
+            if (container instanceof NetworkItemPlayerValidator validator) {
+                if (validator.isValid(coordinates)) {
+                    return true;
+                }
+            }
         }
-
         return false;
     }
 
-    /// 弾薬をRSネットワークから取得する
-    ///
-    /// @param pos     弾薬箱の座標
-    /// @param ammoBox 弾薬箱のItemStack
-    /// @param ammo    弾薬のItemStack
-    /// @param count   更新する弾薬数の上限
-    /// @param mode    抽出モード
     public static ActionResult extractionAmmo(Level level, BlockPos pos, ItemStack ammoBox, ItemStack ammo, int count, Action mode) {
-        INetwork network = getNetwork(ammoBox, level.getServer());
-        if (network == null) return new ActionResult(ActionResult.Status.LINKED_NETWORK_NOT_FOUND, 0);
+        if (!isValid(ammoBox)) {
+            return new ActionResult(ActionResult.Status.DEVICE_NOT_LINKED, 0);
+        }
 
-        // ネットワークの範囲内かチェック
-        if (!isInnerRange(network, level, pos)) return new ActionResult(ActionResult.Status.LINKED_NETWORK_NOT_FOUND, 0);
+        Network network = getNetwork(ammoBox);
+        if (network == null) {
+            return new ActionResult(ActionResult.Status.LINKED_NETWORK_NOT_FOUND, 0);
+        }
 
-        // ネットワークから弾薬を取り出す
-        ItemStack extract = network.extractItem(ammo, count, mode);
-        return new ActionResult(ActionResult.Status.SUCCESS, extract.getCount());
+        if (!isInnerRange(network, level, pos)) {
+            return new ActionResult(ActionResult.Status.LINKED_NETWORK_NOT_FOUND, 0);
+        }
 
+        StorageNetworkComponent storage = network.getComponent(StorageNetworkComponent.class);
+        if (storage == null) {
+            return new ActionResult(ActionResult.Status.LINKED_NETWORK_NOT_FOUND, 0);
+        }
+
+        ItemResource itemResource = ItemResource.ofItemStack(ammo);
+        long extracted = storage.extract(itemResource, count, mode, Actor.EMPTY);
+        return new ActionResult(ActionResult.Status.SUCCESS, (int) Math.min(Integer.MAX_VALUE, extracted));
     }
 
     public record ActionResult(Status status, int count) {
         public enum Status {
             SUCCESS,
+            DEVICE_NOT_LINKED,
             LINKED_NETWORK_NOT_FOUND
         }
     }

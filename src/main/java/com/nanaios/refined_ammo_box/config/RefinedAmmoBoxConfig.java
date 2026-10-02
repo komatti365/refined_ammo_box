@@ -1,24 +1,23 @@
 package com.nanaios.refined_ammo_box.config;
 
-import net.minecraftforge.common.ForgeConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 public class RefinedAmmoBoxConfig {
-    public static ForgeConfigSpec.IntValue AMMO_BOX_USE_POWER_PER_AMMO;
+    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
-    public static ForgeConfigSpec init() {
-        ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
+    public static final ModConfigSpec.IntValue AMMO_BOX_USE_POWER_PER_AMMO;
+    public static final ModConfigSpec.IntValue AMMO_BOX_ENERGY_CAPACITY;
 
-        //init config
-        initPowerConfig(builder);
-
-        return builder.build();
+    static {
+        BUILDER.push("power");
+        AMMO_BOX_USE_POWER_PER_AMMO = BUILDER
+                .comment("Energy consumed per round of ammo retrieved from an ammo box, default: 2")
+                .defineInRange("AmmoBoxUsePowerPerAmmo", 2, 0, Integer.MAX_VALUE);
+        AMMO_BOX_ENERGY_CAPACITY = BUILDER
+                .comment("Max energy capacity of the wireless ammo box, default: 32000")
+                .defineInRange("AmmoBoxEnergyCapacity", 32000, 1000, Integer.MAX_VALUE);
+        BUILDER.pop();
     }
 
-    private static void initPowerConfig(ForgeConfigSpec.Builder builder) {
-        builder.push("power");
-
-        builder.comment("Energy consumed per round of ammo retrieved from an ammo box, default: 2");
-        AMMO_BOX_USE_POWER_PER_AMMO = builder.defineInRange("AmmoBoxUsePowerPerAmmo",2,0,Integer.MAX_VALUE);
-        builder.pop();
-    }
+    public static final ModConfigSpec SPEC = BUILDER.build();
 }

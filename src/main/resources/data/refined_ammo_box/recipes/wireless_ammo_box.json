@@ -16,7 +16,7 @@
       "item": "refinedstorage:controller"
     },
     "d": {
-      "type": "forge:nbt",
+      "type": "forge:partial_nbt",
       "item": "tacz:ammo_box",
       "nbt": {
         "Level": 2
@@ -27,7 +27,7 @@
     }
   },
   "result": {
-    "item": "refined_ammo_box:ammo_box",
+    "id": "refined_ammo_box:ammo_box",
     "count": 1
   }
 }
