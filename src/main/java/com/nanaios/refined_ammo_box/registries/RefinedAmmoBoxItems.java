@@ -26,13 +26,16 @@ public class RefinedAmmoBoxItems {
     public static void registerCreativeTab(CreativeModeTab.Output output) {
         for (DeferredHolder<Item, ? extends Item> registry : WIRELESS_ITEMS.getEntries()) {
             Item item = registry.get();
-            output.accept(item);
+            ItemStack baseStack = new ItemStack(item);
+            output.accept(baseStack);
 
             // 満充電のアイテムも追加する
-            if (item instanceof IEnergyItem energyItem) {
-                ItemStack fullEnergyStack = new ItemStack(item);
-                energyItem.receiveEnergy(fullEnergyStack, energyItem.getMaxEnergyStored(fullEnergyStack), false);
-                output.accept(fullEnergyStack);
+            if (item instanceof IEnergyItem energyItem && energyItem.canReceive(baseStack)) {
+                ItemStack fullEnergyStack = baseStack.copy();
+                int received = energyItem.receiveEnergy(fullEnergyStack, energyItem.getMaxEnergyStored(fullEnergyStack), false);
+                if (received > 0 && !ItemStack.isSameItemSameComponents(baseStack, fullEnergyStack)) {
+                    output.accept(fullEnergyStack);
+                }
             }
         }
     }
